@@ -1,0 +1,12 @@
+<xml>
+<service>pay.weixin.native </service>
+<attach><![CDATA[att]]></attach>
+<body><![CDATA[支付测试]]></body>
+<device_info>1000</device_info>
+<mch_id>10000100</mch_id>
+<nonce_str>adf880d5c8986bd0deb6423c92c9d948</nonce_str>
+<out_trade_no>1406046836</out_trade_no>
+<spbill_create_ip>127.0.0.1</spbill_create_ip>
+<total_fee>1</total_fee>
+<sign><![CDATA[F53145E553092CE52E4CAA4D2B49A91C]]></sign>
+</xml>
