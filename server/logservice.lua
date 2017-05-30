@@ -25,18 +25,33 @@ local function open_log_file()
     end
     return false 
 end
+local function color_print(level, content)
+    local color_str = ""
+    if level == loglevel.debug then
+        color_str = string.format("\27[0;32m%s\27[0m", content)
+    elseif level == loglevel.warn then
+        color_str = string.format("\27[1;33m%s\27[0m", content)
+    elseif level == loglevel.err then
+        color_str = string.format("\27[0;31m%s\27[0m", content)
+    else 
+        color_str = content
+    end
+    io.write(color_str)
+    io.flush()
+end
 function command.log(source, level, t, msg)
     if not logfile then
         skynet.error("logfile object is nil")
         return
     end
-    local lvl_str = "debug"
     if level == loglevel.info then
         lvl_str = "info"
     elseif level == loglevel.warn then
         lvl_str = "warn"
     elseif level == loglevel.err then
         lvl_str = "err"
+    elseif level == loglevel.debug then
+        lvl_str = "debug"
     else
         skynet.error(string.format("unkonwn log level:%s", level))
         return 
@@ -46,8 +61,7 @@ function command.log(source, level, t, msg)
     logfile:write(content)
     logfile:flush()
     if daemon == nil then
-        io.write(content)
-        io.flush()
+        color_print(level, content)
     end
 end
 

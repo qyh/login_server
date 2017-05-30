@@ -8,7 +8,6 @@ local json = require "cjson"
 local const = require "const"
 local futil = require "futil"
 local url = require "http.url"
-local xml = require "simpleXml".newParser()
 local cryptopp = require "cryptopp"
 local logger = require "logger"
 --local logger = require "userlog"
