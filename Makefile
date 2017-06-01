@@ -11,6 +11,7 @@ LUA_CLIB = cjson cryptopp webclient_core
 CJSON_PATH = 3rd/lua-cjson/
 CRYPTOPP_PATH = 3rd/lcryptopp/
 WEBCLIENT_PATH = 3rd/webclient/
+CODEC_PATH = 3rd/lua-codec/src/
 
 all : skynet
 
@@ -32,6 +33,8 @@ $(LUA_CLIB_PATH)/cryptopp.so : $(LUA_CLIB_PATH)
 	cd $(CRYPTOPP_PATH) && $(MAKE) && cd -  && cp $(CRYPTOPP_PATH)/*.so $(LUA_CLIB_PATH)
 $(LUA_CLIB_PATH)/webclient_core.so : $(LUA_CLIB_PATH)
 	cd $(WEBCLIENT_PATH) && $(MAKE) && cd -  && cp $(WEBCLIENT_PATH)/*.so $(LUA_CLIB_PATH)
+$(LUA_CLIB_PATH)/codec.so : $(LUA_CLIB_PATH)
+	cd $(CODEC_PATH) && $(MAKE) && cd -  && cp $(CODEC_PATH)/*.so $(LUA_CLIB_PATH)
 
 
 #$(LUA_CLIB_PATH)/protobuf.so : | $(LUA_CLIB_PATH)
