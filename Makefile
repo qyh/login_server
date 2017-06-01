@@ -7,8 +7,10 @@ LUA_CLIB_PATH ?= luaclib
 CFLAGS = -g -O2 -Wall
 
 #LUA_CLIB = protobuf log
-LUA_CLIB = cjson 
+LUA_CLIB = cjson cryptopp webclient_core
 CJSON_PATH = 3rd/lua-cjson/
+CRYPTOPP_PATH = 3rd/lcryptopp/
+WEBCLIENT_PATH = 3rd/webclient/
 
 all : skynet
 
@@ -26,6 +28,10 @@ $(LUA_CLIB_PATH) :
 
 $(LUA_CLIB_PATH)/cjson.so : $(LUA_CLIB_PATH)
 	cd $(CJSON_PATH) && $(MAKE) && cd -  && cp 3rd/lua-cjson/cjson.so $(LUA_CLIB_PATH)
+$(LUA_CLIB_PATH)/cryptopp.so : $(LUA_CLIB_PATH)
+	cd $(CRYPTOPP_PATH) && $(MAKE) && cd -  && cp $(CRYPTOPP_PATH)/*.so $(LUA_CLIB_PATH)
+$(LUA_CLIB_PATH)/webclient_core.so : $(LUA_CLIB_PATH)
+	cd $(WEBCLIENT_PATH) && $(MAKE) && cd -  && cp $(WEBCLIENT_PATH)/*.so $(LUA_CLIB_PATH)
 
 
 #$(LUA_CLIB_PATH)/protobuf.so : | $(LUA_CLIB_PATH)
