@@ -13,6 +13,7 @@ local function open_log_file()
         return true
     end
     if not logfile then
+        os.execute('mkdir -p '..log_dir)
         local log_full_name = log_dir.."/"..log_file_name
         logfile = io.open(log_full_name, "a+")
         if logfile then
