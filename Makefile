@@ -7,7 +7,7 @@ LUA_CLIB_PATH ?= luaclib
 CFLAGS = -g -O2 -Wall
 
 #LUA_CLIB = protobuf log
-LUA_CLIB = cjson cryptopp webclient_core
+LUA_CLIB = cjson cryptopp webclient_core codec
 CJSON_PATH = 3rd/lua-cjson/
 CRYPTOPP_PATH = 3rd/lcryptopp/
 WEBCLIENT_PATH = 3rd/webclient/
