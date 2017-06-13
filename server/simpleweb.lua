@@ -5,7 +5,7 @@ local sockethelper = require "http.sockethelper"
 local urllib = require "http.url"
 local table = table
 local string = string
-
+local request_handler = require "request_handler"
 local mode = ...
 
 if mode == "agent" then
@@ -32,6 +32,7 @@ skynet.start(function()
 					table.insert(tmp, string.format("host: %s", header.host))
 				end
 				local path, query = urllib.parse(url)
+                --[[
 				table.insert(tmp, string.format("path: %s", path))
 				if query then
 					local q = urllib.parse_query(query)
@@ -44,7 +45,9 @@ skynet.start(function()
 					table.insert(tmp, string.format("%s = %s",k,v))
 				end
 				table.insert(tmp, "-----body----\n" .. body)
-				response(id, code, table.concat(tmp,"\n"))
+                ]]
+                local msg = request_handler.handle_request(path, method, header, query, body)
+				response(id, code, msg..'\n\n')
 			end
 		else
 			if url == sockethelper.socket_error then
