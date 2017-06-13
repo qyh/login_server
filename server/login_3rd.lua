@@ -275,6 +275,15 @@ local function get_swiftpass_order(openid, uid, args)
     local mch_create_ip = {}
     mch_create_ip.name = "mch_create_ip"
     mch_create_ip.text = "ipxxxxx"
+    --<time_start>20170605195505</time_start><time_expire>20170605202505</time_expire>
+    local time_start = {
+        name = "time_start",
+        text = "20170605205105",
+    }
+    local time_expire = {
+        name = "time_expire",
+        text = "20170605212505",
+    }
     local notify_url = {}
     notify_url.name = "notify_url"
     notify_url.text = "106.75.148.223:8003/payment_notify/swiftpass"
@@ -283,7 +292,7 @@ local function get_swiftpass_order(openid, uid, args)
     nonce_str.text = "random_str"
 
     local kids = {service, version, charset, sign_type, sign, mch_id, out_trade_no, body, total_fee,
-    mch_create_ip, notify_url, nonce_str}
+    mch_create_ip, notify_url, nonce_str,time_start, time_expire}
     local kv = {}
     for _, p in pairs(kids) do
         kv[p.name] = p.text
@@ -345,7 +354,7 @@ local function alipay_precreate()
     params.sign_type = "RSA"
     params.version = "1.0"
     params.timestamp = os.date("%Y-%m-%d %H:%M:%S", os.time())
-    params.notify_url = "http://106.75.148.223:8003/payment_notify/test_alipay_precreate"
+    params.notify_url = "http://dev1_game.happyfish.lkgame.com:8007/payment_notify/alipay_trade_precreate"
     params.biz_content = json.encode(biz_content)
     skynet.error('alipay_precreate:')
     local sign_str = (sort_params(params))
@@ -431,8 +440,8 @@ local function main()
     end
     --alipay_precreate()
     --test_rsa()
-    test_xml()
-    get_swiftpass_order(nil, nil, {})
+    --test_xml()
+    --get_swiftpass_order(nil, nil, {})
     logger.debug("debug log test")    
     logger.info("info log test")    
     logger.warn("warn log test")    
