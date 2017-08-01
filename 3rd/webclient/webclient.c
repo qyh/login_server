@@ -38,19 +38,23 @@ THE SOFTWARE.
 #define LUA_WEB_CLIENT_MT		("com.dpull.lib.WebClientMT")
 #define ENABLE_FOLLOWLOCATION   1
 
+
 struct webclient
 {
     CURLM* curlm;
     CURL* encoding_curl;
+    long timeout;
 };
 
 struct webrequest
 {
     CURL* curl;
+    struct curl_slist* header;
     char error[CURL_ERROR_SIZE];
     char* content;
     size_t content_length;
     size_t content_maxlength;
+    bool content_realloc_failed;
 };
 
 static int webclient_create(lua_State* l)
@@ -64,6 +68,8 @@ static int webclient_create(lua_State* l)
     
     struct webclient* webclient = (struct webclient*)lua_newuserdata(l, sizeof(*webclient));
     webclient->curlm = curlm;
+    webclient->encoding_curl = NULL;
+    webclient->timeout = 3L;
  
     luaL_getmetatable(l, LUA_WEB_CLIENT_MT);
     lua_setmetatable(l, -2);
@@ -135,7 +141,7 @@ static size_t write_callback(char* buffer, size_t block_size, size_t count, void
     assert(webrequest);
     
     size_t length = block_size * count;
-    if (webrequest->error[0] != '\0')
+    if (webrequest->content_realloc_failed)
         return length;
     
     if (webrequest->content_length + length > webrequest->content_maxlength) {
@@ -145,7 +151,7 @@ static size_t write_callback(char* buffer, size_t block_size, size_t count, void
 
         void* new_content = (char*)realloc(webrequest->content, webrequest->content_maxlength);
         if (!new_content) {
-            strncpy(webrequest->error, "not enough memory.", sizeof(webrequest->error));
+            webrequest->content_realloc_failed = true;
             return length;
         }
         webrequest->content = new_content;
@@ -156,7 +162,7 @@ static size_t write_callback(char* buffer, size_t block_size, size_t count, void
     return length;
 }
 
-static struct webrequest* webclient_realrequest(struct webclient* webclient, const char* url, const char* postdata, size_t postdatalen, long connect_timeout_ms)
+static struct webrequest* webclient_realrequest(struct webclient* webclient, const char* url, const char* postdata, size_t postdatalen, struct curl_slist *header_list)
 {
     struct webrequest* webrequest = (struct webrequest*)malloc(sizeof(*webrequest));
     memset(webrequest, 0, sizeof(*webrequest));
@@ -172,8 +178,14 @@ static struct webrequest* webclient_realrequest(struct webclient* webclient, con
     curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION, write_callback);
     curl_easy_setopt(handle, CURLOPT_WRITEDATA, webrequest);
     curl_easy_setopt(handle, CURLOPT_ERRORBUFFER, webrequest->error);
-    curl_easy_setopt(handle, CURLOPT_CONNECTTIMEOUT_MS, connect_timeout_ms);
+    curl_easy_setopt(handle, CURLOPT_TIMEOUT, webclient->timeout);
     curl_easy_setopt(handle, CURLOPT_URL, url);
+
+    //header
+    if (header_list) {
+        webrequest->header = header_list;
+        curl_easy_setopt(webrequest->curl, CURLOPT_HTTPHEADER, webrequest->header);
+    }
     
     if (postdata) {
         curl_easy_setopt(handle, CURLOPT_POSTFIELDSIZE, (long)postdatalen);
@@ -189,6 +201,9 @@ failed:
     if (handle) {
         curl_easy_cleanup(handle);
         handle = NULL;
+    }
+    if (header_list) {
+        curl_slist_free_all(header_list);
     }
     free(webrequest);
     return NULL;
@@ -206,19 +221,20 @@ static int webclient_request(lua_State* l)
     
     const char* postdata = NULL;
     size_t postdatalen = 0;
-    long connect_timeout_ms = 5000;
     
     int top = lua_gettop(l);
     if (top > 2 && lua_isstring(l, 3)) 
         postdata = lua_tolstring(l, 3, &postdatalen);
     
-    if (top > 3 && lua_isnumber(l, 4)) {
-        connect_timeout_ms = lua_tointeger(l, 4);
-        if (connect_timeout_ms < 0)
-            return luaL_argerror(l, 4, "parameter connect_timeout_ms invalid");
+    struct curl_slist* header_list = NULL;
+    if (top > 3 && lua_isstring(l, 4)) {
+        for (int i = 5; i <= top; ++i) {
+            const char* str = lua_tostring(l, i);
+            header_list = curl_slist_append(header_list, str);
+        }
     }
-    
-    struct webrequest* webrequest = webclient_realrequest(webclient, url, postdata, postdatalen, connect_timeout_ms);
+     
+    struct webrequest* webrequest = webclient_realrequest(webclient, url, postdata, postdatalen, header_list);
     if (!webrequest)
         return 0;
     
@@ -236,9 +252,10 @@ static int webclient_removerequest(lua_State* l)
     struct webrequest* webrequest = (struct webrequest*)lua_touserdata(l, 2);
     if (!webrequest)
         return luaL_argerror(l, 2, "parameter index invalid");
-    
+
     curl_multi_remove_handle(webclient->curlm, webrequest->curl);
     curl_easy_cleanup(webrequest->curl);
+    curl_slist_free_all(webrequest->header);
     if (webrequest->content)
         free(webrequest->content);
     free(webrequest);
@@ -255,12 +272,16 @@ static int webclient_getrespond(lua_State* l)
     if (!webrequest)
         return luaL_argerror(l, 2, "parameter index invalid");
     
+    if (webrequest->content_realloc_failed) {
+        strncpy(webrequest->error, "not enough memory.", sizeof(webrequest->error));
+    }
+    
     if (webrequest->error[0] == '\0') {
         lua_pushlstring(l, webrequest->content, webrequest->content_length);
         return 1;
     }
 
-    lua_pushnil(l);
+    lua_pushlstring(l, webrequest->content, webrequest->content_length);
     lua_pushstring(l, webrequest->error);
     return 2;
 }
@@ -304,8 +325,46 @@ static int webclient_getinfo(lua_State* l)
         lua_pushinteger(l, response_code);
         lua_settable(l, -3);
     }
-
+    
+    if (webrequest->content_realloc_failed) {
+        lua_pushstring(l, "content_save_failed");
+        lua_pushboolean(l, webrequest->content_realloc_failed);
+        lua_settable(l, -3);
+    }
     return 1;
+}
+
+static int webclient_settimeout(lua_State* l)
+{
+    struct webclient* webclient = (struct webclient*)luaL_checkudata(l, 1, LUA_WEB_CLIENT_MT);
+    if (!webclient)
+        return luaL_argerror(l, 1, "parameter self invalid");
+    
+    if (!lua_isnumber(l, 2)) {
+        return luaL_argerror(l, 2, "parameter timeout invalid");
+    }
+    long timeout= lua_tointeger(l, 2);
+    if (timeout< 0)
+        return luaL_argerror(l, 2, "parameter timeout invalid");
+
+    webclient->timeout = timeout;
+
+    return 0;
+}
+
+static int webclient_debug(lua_State* l)
+{
+    struct webclient* webclient = (struct webclient*)luaL_checkudata(l, 1, LUA_WEB_CLIENT_MT);
+    if (!webclient)
+        return luaL_argerror(l, 1, "parameter self invalid");
+    
+    struct webrequest* webrequest = (struct webrequest*)lua_touserdata(l, 2);
+    if (!webrequest)
+        return luaL_argerror(l, 2, "parameter index invalid");
+    
+    int enable = lua_toboolean(l, 3);
+    curl_easy_setopt(webrequest->curl, CURLOPT_VERBOSE, enable ? 1L : 0L);
+    return 0;
 }
 
 static int url_encoding(lua_State* l)
@@ -342,7 +401,10 @@ luaL_Reg webclient_funs[] = {
     { "remove_request", webclient_removerequest },
     { "get_respond", webclient_getrespond },
     { "get_info", webclient_getinfo },
+    { "set_timeout_ms", webclient_settimeout},
+    { "debug", webclient_debug },
     { "url_encoding", url_encoding },
+    
     { NULL, NULL }
 };
 

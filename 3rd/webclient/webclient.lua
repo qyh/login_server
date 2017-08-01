@@ -5,9 +5,10 @@
 
 
 local skynet = require "skynet"
-require "skynet.manager"	-- import skynet.register
+require "skynet.manager"
 local webclientlib = require "webclient_core"
 local logger = require "logger"
+local skynet_util = require "skynet_util"
 local webclient = webclientlib.create()
 local requests = nil
 
@@ -16,11 +17,16 @@ local function resopnd(request)
         return
     end
 
-    local content, errmsg = webclient:get_respond(request.req)
+    local content, errmsg = webclient:get_respond(request.req)  
     if not errmsg then
         request.response(true, true, content)
     else
-        request.response(true, false, errmsg)
+        local info = webclient:get_info(request.req) 
+        if info.response_code == 200 and not info.content_save_failed then
+            request.response(true, true, content, errmsg)
+        else
+            request.response(true, false, errmsg, info)
+        end
     end
 end
 
@@ -31,7 +37,7 @@ local function query()
             local request = requests[finish_key];
             assert(request)
 
-            xpcall(resopnd, function() logger.Error(debug.traceback()) end, request)
+            xpcall(resopnd, function() logger.err(debug.traceback()) end, request)
 
             webclient:remove_request(request.req)
             requests[finish_key] = nil
@@ -42,17 +48,18 @@ local function query()
     requests = nil
 end
 
+local CMD = {}
 --- 请求某个url
 -- @function request
 -- @string url url
 -- @tab[opt] get get的参数
 -- @param[opt] post post参数，table or string类型 
--- @bool[opt] no_reply 使用skynet.call则要设置为nil或false，使用skynet.send则要设置为true
+-- @header[opt] header 参数 , table: {['Content-Type']="application/x-www-form-urlencoded;charset=utf-8"}
 -- @treturn bool 请求是否成功
 -- @treturn string 当成功时，返回内容，当失败时，返回出错原因 
 -- @usage skynet.call(webclient, "lua", "request", "http://www.dpull.com")
--- @usage skynet.send(webclient, "lua", "request", "http://www.dpull.com", nil, nil, true)
-local function request(url, get, post, no_reply)
+-- @usage skynet.send(webclient, "lua", "request", "http://www.dpull.com", nil, nil, header)
+function CMD.request(session, url, get, post, header)
     if get then
         local i = 0
         for k, v in pairs(get) do
@@ -75,14 +82,21 @@ local function request(url, get, post, no_reply)
         post = table.concat(data , "&")
     end   
 
-    local req, key = webclient:request(url, post)
+    local header_list = {}
+	if header then
+		for k,v in pairs(header) do
+			table.insert(header_list, string.format("%s:%s", k, v))
+		end
+	end
+
+    local req, key = webclient:request(url, post, table.unpack(header_list))
     if not req then
         return skynet.ret()
     end
-    assert(key)
+    assert(key, 'webclient:request key return nil!!')
 
     local response = nil
-    if not no_reply then
+    if session ~= 0 then
         response = skynet.response()
     end
 
@@ -98,10 +112,25 @@ local function request(url, get, post, no_reply)
     }
 end
 
+function CMD.get(session, url, form, header)
+    return CMD.request(session, url, form, nil, header)
+end
+
+function CMD.post(session, url, form, header)
+    return CMD.request(session, url, nil, form, header)
+end
+
 skynet.start(function()
     skynet.dispatch("lua", function(session, source, command, ...)
-        assert(command == "request")
-        request(...)
+		local cmd = string.lower(command)
+        local f = CMD[cmd]
+        if not f then
+            return error(string.format("%s Unknown command %s", SERVICE_NAME, tostring(cmd)))
+        end
+        local ok, err = xpcall(f, skynet_util.handle_err, session, ...)
+		if not ok then
+			error(err)
+		end
     end)
 	skynet.register ".webclient"
 end)
