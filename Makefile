@@ -4,6 +4,7 @@ PLAT ?= linux
 SHARED := -fPIC --shared
 LUA_CLIB_PATH ?= luaclib
 LUA_CLIB_INC ?= include
+DEP ?= $(shell pwd)/dep
 
 #LUA_CLIB = protobuf log
 LUA_CLIB = cjson cryptopp webclient_core codec 
@@ -13,7 +14,9 @@ WEBCLIENT_PATH = 3rd/webclient/
 CODEC_PATH = 3rd/lua-codec/src/
 LUA_CORE= liblua.so
 LUA_CORE_PATH= 3rd/lua
-LUA_MK= makefile
+LUA_MK= luamakefile
+OPENSSL_PATH= 3rd/openssl
+OPENSSL= libssl.so
 all : skynet
 
 skynet/Makefile :
@@ -22,12 +25,14 @@ skynet/Makefile :
 skynet : skynet/Makefile
 	cd skynet && $(MAKE) $(PLAT) && cd ..
 
-export C_INCLUDE_PATH=$(shell pwd)/$(LUA_CLIB_INC)
-export CPLUS_INCLUDE_PATH=$(shell pwd)/$(LUA_CLIB_INC)
-export LD_LIBRARY_PATH=$(shell pwd)/$(LUA_CLIB_PATH)
+export C_INCLUDE_PATH=$(shell pwd)/$(LUA_CLIB_INC):$(DEP)/include
+export CPLUS_INCLUDE_PATH=$(shell pwd)/$(LUA_CLIB_INC):$(DEP)/include
+export LD_LIBRARY_PATH=$(shell pwd)/$(LUA_CLIB_PATH):$(DEP)/lib:$(DEP)/lib64
 
+$(DEP) :
+	mkdir -p dep 
 all : \
-	$(LUA_MK) $(LUA_CLIB_INC) $(LUA_CORE) $(foreach v, $(LUA_CLIB), $(LUA_CLIB_PATH)/$(v).so)
+	$(DEP) $(OPENSSL) $(LUA_MK) $(LUA_CLIB_INC) $(LUA_CORE) $(foreach v, $(LUA_CLIB), $(LUA_CLIB_PATH)/$(v).so)
 test :
 	env
 $(LUA_MK):
@@ -36,6 +41,8 @@ $(LUA_CLIB_PATH) :
 	mkdir -p $(LUA_CLIB_PATH)
 $(LUA_CLIB_INC) :
 	mkdir -p $(LUA_CLIB_INC)
+$(OPENSSL): 
+	cd $(OPENSSL_PATH) && ./config --prefix=$(DEP) && make && make install 
 $(LUA_CORE) :
 	cd $(LUA_CORE_PATH) && $(MAKE) && cd - && cp $(LUA_CORE_PATH)/*.h $(LUA_CLIB_INC) && cp $(LUA_CORE_PATH)/*.so $(LUA_CLIB_PATH)
 $(LUA_CLIB_PATH)/cjson.so : $(LUA_CLIB_PATH)
