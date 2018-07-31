@@ -10,3 +10,9 @@
 [submodule "3rd/openssl"]
 	path = 3rd/openssl
 	url = https://github.com/openssl/openssl.git
+[submodule "3rd/nghttp2"]
+	path = 3rd/nghttp2
+	url = https://github.com/nghttp2/nghttp2.git
+[submodule "3rd/CMake"]
+	path = 3rd/CMake
+	url = https://github.com/Kitware/CMake.git
