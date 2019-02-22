@@ -1,0 +1,50 @@
+local codec = require('codec')
+local src = '123456'
+local pubpem = [[-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAieUxbCGkqEk3PtsSGRTo
+VkseDbxtDopCIsFChCVB6J4IsEd8VOf6wsEzw8eQIKQeGeKAElHlpwjrHkjttWS3
+MtPtoTc4ObZyQvS43bmVjltqsJRJp99pEdvAbJ1L//gGLagfGhT/FssSqPNooqFC
+1RHEUdYgvJ5rqdyT9MLTqEa+WGfk77ltzyXmeioyK4oM5arLvYs0rFjNh5T1Lf/F
+VcZIVc69RZK0EulkqpoEe0gVXblTLhOWL1pxxZHdEfHHDYIKhgW5y2AGgeRWn+3p
+W06kkT17TO69LRbO412D/D2Y0U1teoHMJNpCFsXto6yQAK9Pdzff/WIIvX7dOL7b
+mQIDAQAB
+-----END PUBLIC KEY-----]]
+local bs = codec.rsa_public_encrypt(src, pubpem, 2)
+local dst = codec.base64_encode(bs)
+print(dst)
+
+local privpem = [[-----BEGIN RSA PRIVATE KEY-----
+MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCJ5TFsIaSoSTc+
+2xIZFOhWSx4NvG0OikIiwUKEJUHongiwR3xU5/rCwTPDx5AgpB4Z4oASUeWnCOse
+SO21ZLcy0+2hNzg5tnJC9LjduZWOW2qwlEmn32kR28BsnUv/+AYtqB8aFP8WyxKo
+82iioULVEcRR1iC8nmup3JP0wtOoRr5YZ+TvuW3PJeZ6KjIrigzlqsu9izSsWM2H
+lPUt/8VVxkhVzr1FkrQS6WSqmgR7SBVduVMuE5YvWnHFkd0R8ccNggqGBbnLYAaB
+5Faf7elbTqSRPXtM7r0tFs7jXYP8PZjRTW16gcwk2kIWxe2jrJAAr093N9/9Ygi9
+ft04vtuZAgMBAAECggEAdZUcpnKtn94GoK9W6FI+p06YSugwKiTUriQTHvFSGROg
+nwflydShq63pAPlLOboX/MR5pqV06RCexA01vOYrnMi/qSeX5wZeuh9I/6//CguD
+lxxrDh1fz52NoFAkfRi10/q2wpvCxGHXAH/F6l8NyPfEam/nLE79yTLQavYyWxrv
+SXTzQX7Y88ZSc16BS4NQCSZ/hIn8vvF9YOHKSu7lx2ZiMAJlXH80DjnwDlju8wv3
+nXbsQXfSUpt2E8B4Dsn4iHO+EYjMP5aHaqCtpp4z4iLi+40Rr2vokoMW8uxkF4yy
+qET0UygEBgKSizqBkq5X1xYVaCpFhEC3bZccH0mU8QKBgQC8UmhjUQ3bt0kV3nuM
+hhcB3gEf22dyFY2kkUgjcq455Uz+TSY8YjywJFPXN9CAQYgjLwUhAAUUJViCzDNs
+imt1Q66/9zfvxqXW1t2h+abnD9oshYGeJf4RDJhqXUmOGKSiOcC/yc2DeeRfib0F
+tpcMEuwNIMM3UtADw1BNWzfZPQKBgQC7c4rclSoFxQ9KuH4I94Pk4b97qw0Ey0EO
+HaG7XAA0ra4F4WfRbCig/VSY5R6r3XTvB1rvv8FITYOff1LxL4KC3gWPjQ319ShR
+aArZph4ijqLpGleoczYHWwkuXM5iW7UsDpatE22ECGorzVCtaYJLGqSkXYoV7OEZ
+HleCHa5ZjQKBgAXJioeyz/g2k7pmUempnT9jcSlndrBc1TN/e3YLaitBTrJp8Ije
+g/rtwt3US0YFvYdHRKMU+xL5atTqLZJiVpcN82rW0BNASYxmofz+TRDAvfWsTKVt
+iXdAqdZq8324aCbMG45JR1WJA2mkM/je+ZlXY4WrwhQLKXVUJT2bVgYJAoGAbjao
+LbvSYmQT8qX5DMKjHP8Se979n5T2IhuQDT4xrMd1a2W1ie+jD80DYYZNe1WRPD1B
+3XcMaLuSqUPOe5qojNOHx3hy/etwEjUvM/s0+rKM3KutYJCk8rw28LiGbFRpeIb3
+Vrn2iUv9SNXGGr/PaOM4bJ/G4c9OJlutrgZPjb0CgYEApsJdsHMmKIbX6WZ9jpE7
+h+SYCdt61sCU2zYdUvhePKWlTdgKzT7QjgkOJ3RwGFj5/MpJv/FieySGCf4SOkO6
+yX+kP+r1hUm4N/vLjxUzQS78ObW5VgHRSO9FF/x/beG/QmXSUTvx3KPJHnCxRn5o
+tbop2Z3hUi8HKVXuE5Sbz+E=
+-----END RSA PRIVATE KEY-----]]
+print ("===")
+local dbs = codec.base64_decode(dst)
+local dsrc = codec.rsa_private_decrypt(dbs, privpem)
+print(dsrc)
+
+assert(dsrc == src)
+

@@ -2,7 +2,6 @@
 #include <lua.h>
 #include <lauxlib.h>
 #include <lualib.h>
-#include <openssl/ossl_typ.h>
 #include <openssl/bio.h>
 #include <openssl/rsa.h>
 #include <openssl/pem.h>
@@ -743,7 +742,7 @@ int luaopen_codec(lua_State *L)
 		{"rsa_public_verify", codec_rsa_public_verify},
 		{"rsa_public_encrypt", codec_rsa_public_encrypt},
     {"rsa_private_decrypt", codec_rsa_private_decrypt},
-    {"rsa_private_sign_sha256withrsa", codec_rsa_private_sign_sha256withrsa},
+    {"rsa_private_sign__sha256withrsa", codec_rsa_private_sign_sha256withrsa},
 		{"rsa_public_verify_sha256withrsa", codec_rsa_public_verify_sha256withrsa},
 		{NULL, NULL}
 	};

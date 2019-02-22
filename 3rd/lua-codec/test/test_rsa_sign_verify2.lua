@@ -1,0 +1,48 @@
+local codec = require('codec')
+local src = '123456'
+local privpem = [[-----BEGIN RSA PRIVATE KEY-----
+MIIEowIBAAKCAQEAwZesbRwWydkPJV9KjDa+OJi5KKBgX8c63GxQORh33mZS+TT/
+brp++IVhB0mIqSDtZFoagigXWTe5maQEsJAAivseVwRopWq+ZtmNt6CpPksAsv5w
+F7MYKmAZuj8TKaNmhwnzkExZPDIPGJgov+njsfD1CRwiT1JOcy1zd4T1Bdo4UPjb
+zYIBjchUPSO7MzFjRmCEsZ3I8k9M7jrEJtsbVv2IJ6vd6tASqNoT3zxmk5RxUE7v
+jjgQ9nm2IYS9KQtikkj39YkqnqVdVcfWIJ1HNh23/44SXUvS/nL++kChMAUbuXeP
+C9gcdS+0fJE8qHlCVWUS21vWtNZrHI9lAEl7XwIDAQABAoIBAF/vZt4nJk/exfey
+MkIrurZXUKKGX1v3Yf7rmhHBQ12t/X5Lui1INDW5+yxeT1/o1lt9n1dSwMdQqyQt
+OLm6ktpMuWtL3wPiUvqq4uTVtCkPiAgruKa19MrDFtzJ9xgSRnOzBcVDYJFJCVwZ
+w0/fexuqGfPqwkHmusOvCWJ4O+gqrx/WTt6ajCUr7oSb0Y46ELYDJYAVsuv/G7b3
+ExDtyQ88I+mXJy1QNkcaQ/l/EhIDhfEospUK6M0rzc3IlmSIY9KO6u6PcxAJ2ox2
+2KYh+PC4M7UOvnP/7FNhBA7EqajDBLPP/GQZursBm18+0IJ7JJKL2wOa3EGXnIrv
+atFkLQECgYEA9r/AyPnZcdUViXNBKF9fj9WAy4YzNMPqo0GUYHPNSpfjHUfJwPTa
+k06U2TO4sttFr99lyAvmIOexzK6/jReTHT0w3FmuBpaDBKC3nJxy7iLpHASH6aZb
+mDgVhclIsiVw4JHylpaucW2n4TlKJxIz0DdNt3Dv1C313zGTiff7/4ECgYEAyNm8
+EX7O0zazGBiOwfLbJL+Q6PeebAe4r0U5rn8X++Mj8j4sWC+r7Oi1+NROWUqODW5N
+8y3e9vxe2KNg6b9cCGy6W34iz7l9uUX22569hYTct06hVHbp68gs5+cYjFVSzXqE
+SHzvGDRC162cdCiu//s7P+TuyBsn6eWLkkE66t8CgYB8t30U2BxNCfvhxmyHoHUn
+uS1pMYKOR/w/2jTJ754y9sRnl1Jlgh08WXqoshjH5ka51zuVulXuCc33e9f704+b
+NsOMjJOGZusAGs/Ti8wXi3OxoqSjt18SeD6AqbVhvcTo7TvlW3H+iQNStmdBilTA
+CEPy1VWTNEvTLTa6hKpNgQKBgFfkaFdjnZByJGdL/9TBuMJZDknUakAuFNSmP3qr
+5Uv19vn/2RnyKpMutssf5PVQGd+owHXFQgflIoA85qEDe3u4UMjO5t7t9iWIh2FO
+EvOF06xnvVOgAfeLDpOg3m4yvFxs28x414xI+mM1dvyh/QrJ3wCz5wYsVAgXyj8D
+SowTAoGBAMIIULP3lpxzga+CkneuWxeh9L5ZD2hEdhnLvQFPP30o4wezW0dAUGNa
+zX+7zfFpxp4nwtioYIKzBXAACm8eedEENPDRL4vgvVaW13E8YM2tvGk5BWowPlC5
+flYUaiUILjveZDOawmy6Pvsj3vkzyaztJHHK/kwB0kH6qWGM+Aq0
+-----END RSA PRIVATE KEY-----]]
+local bs = codec.rsa_private_sign_sha256withrsa(src, privpem)
+local sign = codec.base64_encode(bs)
+print(sign)
+
+local dbs = codec.base64_decode(sign)
+local pubpem = [[-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwZesbRwWyd
+kPJV9KjDa+OJi5KKBgX8c63GxQORh33mZS+TT/brp++IVhB0mIqSDt
+ZFoagigXWTe5maQEsJAAivseVwRopWq+ZtmNt6CpPksAsv5wF7MYKm
+AZuj8TKaNmhwnzkExZPDIPGJgov+njsfD1CRwiT1JOcy1zd4T1Bdo4
+UPjbzYIBjchUPSO7MzFjRmCEsZ3I8k9M7jrEJtsbVv2IJ6vd6tASqN
+oT3zxmk5RxUE7vjjgQ9nm2IYS9KQtikkj39YkqnqVdVcfWIJ1HNh23
+/44SXUvS/nL++kChMAUbuXePC9gcdS+0fJE8qHlCVWUS21vWtNZrHI
+9lAEl7XwIDAQAB
+-----END PUBLIC KEY-----]]
+local ok = codec.rsa_public_verify_sha256withrsa(src, dbs, pubpem, 2)
+print(ok)
+assert(ok)
+

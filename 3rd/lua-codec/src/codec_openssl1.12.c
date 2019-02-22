@@ -2,13 +2,14 @@
 #include <lua.h>
 #include <lauxlib.h>
 #include <lualib.h>
-#include <openssl/ossl_typ.h>
 #include <openssl/bio.h>
 #include <openssl/rsa.h>
 #include <openssl/pem.h>
 #include <openssl/evp.h>
 #include <openssl/md5.h>
 #include <openssl/hmac.h>
+
+#define SMALL_CHUNK 256
 
 /**
  * BASE64编码
@@ -20,8 +21,9 @@
  */
 static int codec_base64_encode(lua_State *L)
 {
-  size_t len;
+  size_t len=0;
   const char *bs = lua_tolstring(L, 1, &len);
+
   BIO *b64 = BIO_new(BIO_f_base64());
   BIO_set_flags(b64, BIO_FLAGS_BASE64_NO_NL);
   BIO *bio = BIO_new(BIO_s_mem());
@@ -30,12 +32,10 @@ static int codec_base64_encode(lua_State *L)
   BIO_flush(bio);
   BUF_MEM *p;
   BIO_get_mem_ptr(bio, &p);
-  int n = p->length;
-  char dst[n];
-  memcpy(dst, p->data, n);
-  BIO_free_all(bio);
 
-  lua_pushlstring(L, dst, n);
+  lua_pushlstring(L, p->data, p->length);
+
+  BIO_free_all(b64);
   return 1;
 }
 
@@ -49,17 +49,25 @@ static int codec_base64_encode(lua_State *L)
  */
 static int codec_base64_decode(lua_State *L)
 {
-  size_t len;
+  size_t len=0;
   const char *cs = lua_tolstring(L, 1, &len);
   BIO *b64 = BIO_new(BIO_f_base64());
   BIO_set_flags(b64, BIO_FLAGS_BASE64_NO_NL);
   BIO *bio = BIO_new_mem_buf((void *)cs, len);
   bio = BIO_push(b64, bio);
-  char dst[len];
-  int n = BIO_read(bio, dst, len);
-  BIO_free_all(bio);
+
+  //base64加密后长度约为原来的4/3
+  char tmp[SMALL_CHUNK];
+  uint8_t chunksz = (len+8) & ~7;
+  char *dst = tmp;
+  if(chunksz > SMALL_CHUNK){
+      dst = lua_newuserdata(L, chunksz);
+  }
+  int n = BIO_read(bio, dst, chunksz);
 
   lua_pushlstring(L, dst, n);
+
+  BIO_free_all(b64);
   return 1;
 }
 
@@ -123,6 +131,113 @@ static int codec_hmac_sha1_encode(lua_State *L)
  * LUA示例:
  * local codec = require('codec')
  * local src = 'something'
+ * local key = [[...]] --32位数字串
+ * local bs = codec.aes_encrypt_32(src, key)
+ * local dst = codec.base64_encode(bs) --BASE64密文
+ */
+static int codec_aes_encrypt_32(lua_State *L)
+{
+  size_t len;
+  const char *src = lua_tolstring(L, 1, &len);
+  char *key = lua_tostring(L, 2);
+
+  EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+
+  int ret = EVP_EncryptInit_ex(ctx, EVP_aes_256_ecb(), NULL, (unsigned char *)key, NULL);
+  if(ret != 1)
+  {
+    EVP_CIPHER_CTX_free(ctx);
+    lua_pushstring(L, "EVP encrypt init error");
+  return lua_error(L);
+  }
+
+  int dstn = len + 256, n, wn;
+  char dst[dstn];
+  memset(dst, 0, dstn);
+
+  ret = EVP_EncryptUpdate(ctx, (unsigned char *)dst, &wn, (unsigned char *)src, len);
+  if(ret != 1)
+  {
+    EVP_CIPHER_CTX_free(ctx);
+    lua_pushstring(L, "EVP encrypt update error");
+  return lua_error(L);
+  }
+  n = wn;
+
+  ret = EVP_EncryptFinal_ex(ctx, (unsigned char *)(dst + n), &wn);
+  if(ret != 1)
+  {
+    EVP_CIPHER_CTX_free(ctx);
+    lua_pushstring(L, "EVP encrypt final error");
+  return lua_error(L);
+  }
+  EVP_CIPHER_CTX_free(ctx);
+  n += wn;
+
+  lua_pushlstring(L, dst, n);
+  return 1;
+}
+
+/**
+ * AES-ECB-PKCS5Padding解密
+ *
+ * LUA示例:
+ * local codec = require('codec')
+ * local src = [[...]] --BASE64密文
+ * local key = [[...]] --32位数字串
+ * local bs = codec.base64_decode(src)
+ * local dst = codec.aes_decrypt_32(bs, key)
+ */
+static int codec_aes_decrypt_32(lua_State *L)
+{
+  size_t len;
+  const char *src = lua_tolstring(L, 1, &len);
+  char *key = lua_tostring(L, 2);
+
+  EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+
+  int ret = EVP_DecryptInit_ex(ctx, EVP_aes_256_ecb(), NULL, (unsigned char *)key, NULL);
+  if(ret != 1)
+  {
+    EVP_CIPHER_CTX_free(ctx);
+    lua_pushstring(L, "EVP decrypt init error");
+  return lua_error(L);
+  }
+
+  int n, wn;
+  char dst[len];
+  memset(dst, 0, len);
+
+  ret = EVP_DecryptUpdate(ctx, (unsigned char *)dst, &wn, (unsigned char *)src, len);
+  if(ret != 1)
+  {
+    EVP_CIPHER_CTX_free(ctx);
+    lua_pushstring(L, "EVP decrypt update error");
+  return lua_error(L);
+  }
+  n = wn;
+
+  ret = EVP_DecryptFinal_ex(ctx, (unsigned char *)(dst + n), &wn);
+  if(ret != 1)
+  {
+    EVP_CIPHER_CTX_free(ctx);
+    lua_pushstring(L, "EVP decrypt final error");
+  return lua_error(L);
+  }
+  EVP_CIPHER_CTX_free(ctx);
+  n += wn;
+
+  lua_pushlstring(L, dst, n);
+  return 1;
+}
+
+
+/**
+ * AES-ECB-PKCS5Padding加密
+ *
+ * LUA示例:
+ * local codec = require('codec')
+ * local src = 'something'
  * local key = [[...]] --16位数字串
  * local bs = codec.aes_encrypt(src, key)
  * local dst = codec.base64_encode(bs) --BASE64密文
@@ -133,13 +248,12 @@ static int codec_aes_encrypt(lua_State *L)
   const char *src = lua_tolstring(L, 1, &len);
   char *key = lua_tostring(L, 2);
 
-  EVP_CIPHER_CTX ctx;
-  EVP_CIPHER_CTX_init(&ctx);
+  EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
 
-  int ret = EVP_EncryptInit_ex(&ctx, EVP_aes_128_ecb(), NULL, (unsigned char *)key, NULL);
+  int ret = EVP_EncryptInit_ex(ctx, EVP_aes_128_ecb(), NULL, (unsigned char *)key, NULL);
   if(ret != 1)
   {
-    EVP_CIPHER_CTX_cleanup(&ctx);
+    EVP_CIPHER_CTX_free(ctx);
     lua_pushstring(L, "EVP encrypt init error");
 	return lua_error(L);
   }
@@ -148,23 +262,23 @@ static int codec_aes_encrypt(lua_State *L)
   char dst[dstn];
   memset(dst, 0, dstn);
 
-  ret = EVP_EncryptUpdate(&ctx, (unsigned char *)dst, &wn, (unsigned char *)src, len);
+  ret = EVP_EncryptUpdate(ctx, (unsigned char *)dst, &wn, (unsigned char *)src, len);
   if(ret != 1)
   {
-    EVP_CIPHER_CTX_cleanup(&ctx);
+    EVP_CIPHER_CTX_free(ctx);
     lua_pushstring(L, "EVP encrypt update error");
 	return lua_error(L);
   }
   n = wn;
 
-  ret = EVP_EncryptFinal_ex(&ctx, (unsigned char *)(dst + n), &wn);
+  ret = EVP_EncryptFinal_ex(ctx, (unsigned char *)(dst + n), &wn);
   if(ret != 1)
   {
-    EVP_CIPHER_CTX_cleanup(&ctx);
+    EVP_CIPHER_CTX_free(ctx);
     lua_pushstring(L, "EVP encrypt final error");
 	return lua_error(L);
   }
-  EVP_CIPHER_CTX_cleanup(&ctx);
+  EVP_CIPHER_CTX_free(ctx);
   n += wn;
 
   lua_pushlstring(L, dst, n);
@@ -187,13 +301,12 @@ static int codec_aes_decrypt(lua_State *L)
   const char *src = lua_tolstring(L, 1, &len);
   char *key = lua_tostring(L, 2);
 
-  EVP_CIPHER_CTX ctx;
-  EVP_CIPHER_CTX_init(&ctx);
+  EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
 
-  int ret = EVP_DecryptInit_ex(&ctx, EVP_aes_128_ecb(), NULL, (unsigned char *)key, NULL);
+  int ret = EVP_DecryptInit_ex(ctx, EVP_aes_128_ecb(), NULL, (unsigned char *)key, NULL);
   if(ret != 1)
   {
-    EVP_CIPHER_CTX_cleanup(&ctx);
+    EVP_CIPHER_CTX_free(ctx);
     lua_pushstring(L, "EVP decrypt init error");
 	return lua_error(L);
   }
@@ -202,138 +315,28 @@ static int codec_aes_decrypt(lua_State *L)
   char dst[len];
   memset(dst, 0, len);
 
-  ret = EVP_DecryptUpdate(&ctx, (unsigned char *)dst, &wn, (unsigned char *)src, len);
+  ret = EVP_DecryptUpdate(ctx, (unsigned char *)dst, &wn, (unsigned char *)src, len);
   if(ret != 1)
   {
-    EVP_CIPHER_CTX_cleanup(&ctx);
+    EVP_CIPHER_CTX_free(ctx);
     lua_pushstring(L, "EVP decrypt update error");
 	return lua_error(L);
   }
   n = wn;
 
-  ret = EVP_DecryptFinal_ex(&ctx, (unsigned char *)(dst + n), &wn);
+  ret = EVP_DecryptFinal_ex(ctx, (unsigned char *)(dst + n), &wn);
   if(ret != 1)
   {
-    EVP_CIPHER_CTX_cleanup(&ctx);
+    EVP_CIPHER_CTX_free(ctx);
     lua_pushstring(L, "EVP decrypt final error");
 	return lua_error(L);
   }
-  EVP_CIPHER_CTX_cleanup(&ctx);
+  EVP_CIPHER_CTX_free(ctx);
   n += wn;
 
   lua_pushlstring(L, dst, n);
   return 1;
 }
-
-
-/**
- * AES-ECB-PKCS5Padding加密
- *
- * LUA示例:
- * local codec = require('codec')
- * local src = 'something'
- * local key = [[...]] --32位数字串
- * local bs = codec.aes_encrypt(src, key)
- * local dst = codec.base64_encode(bs) --BASE64密文
- */
-static int codec_aes_encrypt_32(lua_State *L)
-{
-  size_t len;
-  const char *src = lua_tolstring(L, 1, &len);
-  char *key = lua_tostring(L, 2);
-
-  EVP_CIPHER_CTX ctx;
-  EVP_CIPHER_CTX_init(&ctx);
-
-  int ret = EVP_EncryptInit_ex(&ctx, EVP_aes_256_ecb(), NULL, (unsigned char *)key, NULL);
-  if(ret != 1)
-  {
-    EVP_CIPHER_CTX_cleanup(&ctx);
-    lua_pushstring(L, "EVP encrypt init error");
-  return lua_error(L);
-  }
-
-  int dstn = len + 256, n, wn;
-  char dst[dstn];
-  memset(dst, 0, dstn);
-
-  ret = EVP_EncryptUpdate(&ctx, (unsigned char *)dst, &wn, (unsigned char *)src, len);
-  if(ret != 1)
-  {
-    EVP_CIPHER_CTX_cleanup(&ctx);
-    lua_pushstring(L, "EVP encrypt update error");
-  return lua_error(L);
-  }
-  n = wn;
-
-  ret = EVP_EncryptFinal_ex(&ctx, (unsigned char *)(dst + n), &wn);
-  if(ret != 1)
-  {
-    EVP_CIPHER_CTX_cleanup(&ctx);
-    lua_pushstring(L, "EVP encrypt final error");
-  return lua_error(L);
-  }
-  EVP_CIPHER_CTX_cleanup(&ctx);
-  n += wn;
-
-  lua_pushlstring(L, dst, n);
-  return 1;
-}
-
-/**
- * AES-ECB-PKCS5Padding解密
- *
- * LUA示例:
- * local codec = require('codec')
- * local src = [[...]] --BASE64密文
- * local key = [[...]] --32位数字串
- * local bs = codec.base64_decode(src)
- * local dst = codec.aes_decrypt(bs, key)
- */
-static int codec_aes_decrypt_32(lua_State *L)
-{
-  size_t len;
-  const char *src = lua_tolstring(L, 1, &len);
-  char *key = lua_tostring(L, 2);
-
-  EVP_CIPHER_CTX ctx;
-  EVP_CIPHER_CTX_init(&ctx);
-
-  int ret = EVP_DecryptInit_ex(&ctx, EVP_aes_256_ecb(), NULL, (unsigned char *)key, NULL);
-  if(ret != 1)
-  {
-    EVP_CIPHER_CTX_cleanup(&ctx);
-    lua_pushstring(L, "EVP decrypt init error");
-  return lua_error(L);
-  }
-
-  int n, wn;
-  char dst[len];
-  memset(dst, 0, len);
-
-  ret = EVP_DecryptUpdate(&ctx, (unsigned char *)dst, &wn, (unsigned char *)src, len);
-  if(ret != 1)
-  {
-    EVP_CIPHER_CTX_cleanup(&ctx);
-    lua_pushstring(L, "EVP decrypt update error");
-  return lua_error(L);
-  }
-  n = wn;
-
-  ret = EVP_DecryptFinal_ex(&ctx, (unsigned char *)(dst + n), &wn);
-  if(ret != 1)
-  {
-    EVP_CIPHER_CTX_cleanup(&ctx);
-    lua_pushstring(L, "EVP decrypt final error");
-  return lua_error(L);
-  }
-  EVP_CIPHER_CTX_cleanup(&ctx);
-  n += wn;
-
-  lua_pushlstring(L, dst, n);
-  return 1;
-}
-
 
 /**
  * SHA1WithRSA私钥签名
@@ -354,7 +357,7 @@ static int codec_rsa_private_sign(lua_State *L)
   SHA_CTX c;
   unsigned char sha[SHA_DIGEST_LENGTH];
   memset(sha, 0, SHA_DIGEST_LENGTH);
-  if(SHA_Init(&c) != 1)
+  if(SHA1_Init(&c) != 1)
   {
     OPENSSL_cleanse(&c, sizeof(c));
     lua_pushstring(L, "SHA init error");
@@ -433,7 +436,7 @@ static int codec_rsa_public_verify(lua_State *L)
   int ctxlen = sizeof(ctx);
   unsigned char sha[SHA_DIGEST_LENGTH];
   memset(sha, 0, SHA_DIGEST_LENGTH);
-  if(SHA_Init(&ctx) != 1)
+  if(SHA1_Init(&ctx) != 1)
   {
     OPENSSL_cleanse(&ctx, ctxlen);
     lua_pushstring(L, "SHA init error");
@@ -475,8 +478,6 @@ static int codec_rsa_public_verify(lua_State *L)
   lua_pushboolean(L, ret);
   return 1;
 }
-
-
 
 /**
  * SHA256WithRSA私钥签名
@@ -619,13 +620,6 @@ static int codec_rsa_public_verify_sha256withrsa(lua_State *L)
   return 1;
 }
 
-
-
-
-
-
-
-
 /**
  * RSA公钥加密
  *
@@ -742,9 +736,9 @@ int luaopen_codec(lua_State *L)
 		{"rsa_private_sign", codec_rsa_private_sign},
 		{"rsa_public_verify", codec_rsa_public_verify},
 		{"rsa_public_encrypt", codec_rsa_public_encrypt},
-    {"rsa_private_decrypt", codec_rsa_private_decrypt},
+		{"rsa_private_decrypt", codec_rsa_private_decrypt},
     {"rsa_private_sign_sha256withrsa", codec_rsa_private_sign_sha256withrsa},
-		{"rsa_public_verify_sha256withrsa", codec_rsa_public_verify_sha256withrsa},
+    {"rsa_public_verify_sha256withrsa", codec_rsa_public_verify_sha256withrsa},
 		{NULL, NULL}
 	};
 
