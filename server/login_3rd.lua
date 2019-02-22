@@ -72,7 +72,6 @@ local function bin2hex(str)
 		return string.format("%02x", string.byte(s))
 	end)
 end
-
 local function getLkUserToken()
     local ec = const.error_code
     local ret = {
@@ -221,7 +220,7 @@ end
 
 local function generate_order_id()
     local t = skynet.time()
-    return string.format("%s",t)
+    return string.format("%s",math.floor(t*100))
 end
 
 local function sort_params(params)
@@ -239,9 +238,136 @@ local function sort_params(params)
     end
     return str 
 end
+local function handle_weixin_native_order(openid, uid, diamond_info, price_config, args)
+    local ec = {
+        ok = 0,
+    }
+    local pay_gateway = "https://api.mch.weixin.qq.com/pay/unifiedorder"
+    local notify_url = "http://112.74.198.84:8007/payment_notify/weixin_native"
+    local wcpay_config = {
+        appid = "",
+        mch_id = "",
+        key = "",
+    }
+    local content = {
+        name = "xml",
+    }
+    local appid = {
+        name = "appid",
+        text = wcpay_config.appid
+    }
+    local mch_id = {
+        name = "mch_id",
+        text = wcpay_config.mch_id
+    }
+    local nonce_str = {
+        name = "nonce_str",
+        text = math.random(1000,10000)
+    }
+    local sign = {
+        name = "sign",
+    }
+    local sign_type = {
+        name = "sign_type",
+        text = "MD5",
+    }
+    local body = {
+        name = "body",
+        text = args.body
+    }
+    local out_trade_no = {
+        name = "out_trade_no",
+        text = generate_order_id() 
+    }
+    local total_fee = {
+        name = "total_fee",
+        text = (price_config.price - price_config.discountable)*100,
+    }
+    local spbill_create_ip = {
+        name = "spbill_create_ip",
+        text = "127.0.0.1",
+    }
+    local t = os.time()
+    local expire = t+2*60*60
+    local time_start = {
+        name = "time_start",
+        text = os.date("%Y%m%d%H%M%S",t) 
+    }
+    local time_expire = {
+        name = "time_expire",
+        text = os.date("%Y%m%d%H%M%S",expire) 
+    }
+    local notify_url = {
+        name = "notify_url",
+        text = notify_url,
+    }
+    local product_id = {
+        name = "product_id",
+        text = "x"
+    }
+    local trade_type = {
+        name = "trade_type",
+        text = "JSAPI",
+    } 
+    local openid = {
+        name = "openid",
+        text = "ogQy10tKNFRrYHFpGYJWglvxN4mI"
+    }
+    local kids = {appid, mch_id, nonce_str,sign,sign_type,body,out_trade_no,
+    total_fee,spbill_create_ip,time_start,time_expire,notify_url,product_id,
+    trade_type,openid
+    }
+    local kv = {}
+    for _, p in pairs(kids) do
+        kv[p.name] = p.text
+    end
+    local sign_str = sort_params(kv).."&key="..wcpay_config.key
+    logger.warn(string.format('sign str:%s', sign_str))
+    local signacture = string.upper(md5.sumhexa(sign_str))
+    sign.text = signacture
+    content.kids = kids
+    local xml = xmlser.serialize(content)
+    logger.warn('xml:%s', xml)
+    local ret = {
+        error_code = ec.ok,
+        err_desc = "OK",
+        order_id = out_trade_no.text,
+        charge_params = xml,
+        pay_gateway = pay_gateway,
+    }
+    return ret 
+end
+local function test_weixin_pay()
+    local price_config = {
+        price = 1,
+        discountable = 0,
+    }
+    local diamond_info = {}
+    local args = {
+        charge_value = 1,
+        charge_plat = 'wcpay',
+        body = "内容",
+        subject = "标题",
+    }
+    local ret = handle_weixin_native_order('openid', 'uid', diamond_info, price_config, args)
+    local header = {
+        ["content-type"] = "application/x-www-form-urlencoced"
+    }
+    local recvheader = {}
+    logger.info('order ret:%s',futil.toStr(ret))
+    local content = "<xml><appid>wx15f022196ed61ff2</appid><mch_id>1484306952</mch_id><nonce_str>1414</nonce_str><sign>C512F2BDB5B7014A885BA3399737CC78</sign><sign_type>MD5</sign_type><body>公众号充值</body><out_trade_no>bypc201708101128529366775443</out_trade_no><total_fee>100</total_fee><spbill_create_ip>0.0.0.0</spbill_create_ip><time_start>20170810112852</time_start><time_expire>20170810132852</time_expire><notify_url>http://112.74.198.84:8007/payment_notify/wcpay_native</notify_url><product_id>0</product_id><trade_type>JSAPI</trade_type><openid>ogQy10tKNFRrYHFpGYJWglvxN4mI</openid></xml>" 
+    local host = ret.pay_gateway 
+    -- perform http request
+    local ok,body= skynet.call('.webclient', 'lua', 'request', host, nil, content, false)
+    if ok then
+        logger.warn("success:%s", body)
+    else
+        logger.err('request failed,host:%s,%s',host,body)
+    end
+end
 local function get_swiftpass_order(openid, uid, args)
     skynet.error('get_swiftpass_order:')
-    local priv_key = "9d101c97133837e13dde2d32a5054abb"
+    local priv_key = "4b2ab8f6cdc60e6e80786de1f8b8ac3a"
     local content = {
         name = "xml",
     }
@@ -262,7 +388,15 @@ local function get_swiftpass_order(openid, uid, args)
     sign.text = ""
     local mch_id = {}
     mch_id.name = "mch_id"
-    mch_id.text = "7551000001"
+    mch_id.text = "102510849275"
+    local sub_mch_id = {
+        name = "sub_mch_id",
+        text = "102540931408"
+    }
+    local groupno = {
+        name = "groupno",
+        text = "102540931408"
+    }
     local out_trade_no = {}
     out_trade_no.name = "out_trade_no"
     out_trade_no.text = generate_order_id()
@@ -275,14 +409,16 @@ local function get_swiftpass_order(openid, uid, args)
     local mch_create_ip = {}
     mch_create_ip.name = "mch_create_ip"
     mch_create_ip.text = "ipxxxxx"
+    local t = os.time()
+    local expire = t + 60*60*2
     --<time_start>20170605195505</time_start><time_expire>20170605202505</time_expire>
     local time_start = {
         name = "time_start",
-        text = "20170605205105",
+        text = os.date("%Y%m%d%H%M%S",t),
     }
     local time_expire = {
         name = "time_expire",
-        text = "20170605212505",
+        text = os.date("%Y%m%d%H%M%S",expire),
     }
     local notify_url = {}
     notify_url.name = "notify_url"
@@ -337,6 +473,125 @@ local function get_swiftpass_order(openid, uid, args)
 end
 local function test_xml()
 end
+local function test_http_post()
+    local host = "http://112.74.198.84:8080/agent/register?account=a&password=a&memberid=1" 
+    local ok, info = skynet.call('.webclient', 'lua', 'request', host, nil, false)
+    if not ok then
+        logger.err('test_http_post failed')
+        return
+    end
+    logger.info('test http post success:%s', info)
+end
+local function alipay_app()
+    local pri_key = 
+[[
+-----BEGIN RSA PRIVATE KEY-----
+MIIEowIBAAKCAQEAwZesbRwWydkPJV9KjDa+OJi5KKBgX8c63GxQORh33mZS+TT/
+brp++IVhB0mIqSDtZFoagigXWTe5maQEsJAAivseVwRopWq+ZtmNt6CpPksAsv5w
+F7MYKmAZuj8TKaNmhwnzkExZPDIPGJgov+njsfD1CRwiT1JOcy1zd4T1Bdo4UPjb
+zYIBjchUPSO7MzFjRmCEsZ3I8k9M7jrEJtsbVv2IJ6vd6tASqNoT3zxmk5RxUE7v
+jjgQ9nm2IYS9KQtikkj39YkqnqVdVcfWIJ1HNh23/44SXUvS/nL++kChMAUbuXeP
+C9gcdS+0fJE8qHlCVWUS21vWtNZrHI9lAEl7XwIDAQABAoIBAF/vZt4nJk/exfey
+MkIrurZXUKKGX1v3Yf7rmhHBQ12t/X5Lui1INDW5+yxeT1/o1lt9n1dSwMdQqyQt
+OLm6ktpMuWtL3wPiUvqq4uTVtCkPiAgruKa19MrDFtzJ9xgSRnOzBcVDYJFJCVwZ
+w0/fexuqGfPqwkHmusOvCWJ4O+gqrx/WTt6ajCUr7oSb0Y46ELYDJYAVsuv/G7b3
+ExDtyQ88I+mXJy1QNkcaQ/l/EhIDhfEospUK6M0rzc3IlmSIY9KO6u6PcxAJ2ox2
+2KYh+PC4M7UOvnP/7FNhBA7EqajDBLPP/GQZursBm18+0IJ7JJKL2wOa3EGXnIrv
+atFkLQECgYEA9r/AyPnZcdUViXNBKF9fj9WAy4YzNMPqo0GUYHPNSpfjHUfJwPTa
+k06U2TO4sttFr99lyAvmIOexzK6/jReTHT0w3FmuBpaDBKC3nJxy7iLpHASH6aZb
+mDgVhclIsiVw4JHylpaucW2n4TlKJxIz0DdNt3Dv1C313zGTiff7/4ECgYEAyNm8
+EX7O0zazGBiOwfLbJL+Q6PeebAe4r0U5rn8X++Mj8j4sWC+r7Oi1+NROWUqODW5N
+8y3e9vxe2KNg6b9cCGy6W34iz7l9uUX22569hYTct06hVHbp68gs5+cYjFVSzXqE
+SHzvGDRC162cdCiu//s7P+TuyBsn6eWLkkE66t8CgYB8t30U2BxNCfvhxmyHoHUn
+uS1pMYKOR/w/2jTJ754y9sRnl1Jlgh08WXqoshjH5ka51zuVulXuCc33e9f704+b
+NsOMjJOGZusAGs/Ti8wXi3OxoqSjt18SeD6AqbVhvcTo7TvlW3H+iQNStmdBilTA
+CEPy1VWTNEvTLTa6hKpNgQKBgFfkaFdjnZByJGdL/9TBuMJZDknUakAuFNSmP3qr
+5Uv19vn/2RnyKpMutssf5PVQGd+owHXFQgflIoA85qEDe3u4UMjO5t7t9iWIh2FO
+EvOF06xnvVOgAfeLDpOg3m4yvFxs28x414xI+mM1dvyh/QrJ3wCz5wYsVAgXyj8D
+SowTAoGBAMIIULP3lpxzga+CkneuWxeh9L5ZD2hEdhnLvQFPP30o4wezW0dAUGNa
+zX+7zfFpxp4nwtioYIKzBXAACm8eedEENPDRL4vgvVaW13E8YM2tvGk5BWowPlC5
+flYUaiUILjveZDOawmy6Pvsj3vkzyaztJHHK/kwB0kH6qWGM+Aq0
+-----END RSA PRIVATE KEY-----]]
+    local pub_key = 
+[[
+-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwZesbRwWyd
+kPJV9KjDa+OJi5KKBgX8c63GxQORh33mZS+TT/brp++IVhB0mIqSDt
+ZFoagigXWTe5maQEsJAAivseVwRopWq+ZtmNt6CpPksAsv5wF7MYKm
+AZuj8TKaNmhwnzkExZPDIPGJgov+njsfD1CRwiT1JOcy1zd4T1Bdo4
+UPjbzYIBjchUPSO7MzFjRmCEsZ3I8k9M7jrEJtsbVv2IJ6vd6tASqN
+oT3zxmk5RxUE7vjjgQ9nm2IYS9KQtikkj39YkqnqVdVcfWIJ1HNh23
+/44SXUvS/nL++kChMAUbuXePC9gcdS+0fJE8qHlCVWUS21vWtNZrHI
+9lAEl7XwIDAQAB
+-----END PUBLIC KEY-----
+]]
+    skynet.error('alipay_app_order:')
+    local biz_content = {}
+    biz_content.out_trade_no = generate_order_id()
+    biz_content.subject = ("title")
+    biz_content.total_amount = 2
+    biz_content.body = "body"
+    biz_content.product_code = "QUICK_MSECURITY_PAY"
+   
+    local params = {}
+    params.app_id = "2019022063257325" 
+    params.method = "alipay.trade.app.pay"
+    params.charset = "GBK"
+    --params.format = "json"
+    params.sign_type = "RSA2"
+    params.version = "1.0"
+    params.timestamp = os.date("%Y-%m-%d %H:%M:%S", os.time())
+    --params.notify_url = "http://dev1_game.happyfish.lkgame.com:8007/payment_notify/alipay_trade_precreate"
+    params.notify_url = "http://dev1_game.happyfish.lkgame.com:8080/getPost"
+    params.biz_content = json.encode(biz_content)
+    skynet.error('alipay_app:')
+    local sign_str = (sort_params(params))
+    skynet.error(string.format('sign string:%s', sign_str))
+	--[[
+    local priv_key, priv_type = cryptopp.pem2der(pri_key)
+    local signer = cryptopp.rsa_signer(priv_key)
+    local sign = (crypt.base64encode(signer(sign_str)))
+	]]
+	logger.debug("%s", codec)
+	local bs = codec.rsa_private_sign_sha256withrsa(sign_str, pri_key)
+	local sign = codec.base64_encode(bs)
+    skynet.error(string.format('sign:%s', sign))
+    params.sign = sign 
+    --- send http request
+    local header = {
+        --["content-type"] = "application/x-www-form-urlencoced"
+        ["content-type"] = "application/text"
+    }
+    local recvheader = {}
+    local form = {
+        app_id = params.app_id,
+        sign = params.sign,
+    }
+    --验签 
+    logger.debug("begin verifier")
+	local dbs = codec.base64_decode(sign)
+	local ok = codec.rsa_public_verify_sha256withrsa(sign_str, dbs, pub_key, 2)
+    logger.debug("verifier done")
+    logger.debug("verifier:%s", ok)
+    local content = json.encode(params)
+    --local host = "https://openapi.alipaydev.com/gateway.do" 
+    local host = "https://openapi.alipay.com/gateway.do" 
+    local uri = string.format("/")
+    -- perform http request
+    skynet.error(string.format('send http request:..'))
+    local r,info = skynet.call('.webclient', 'lua', 'request', host, nil, params, false)
+    if not r then
+        skynet.error('request failed')
+        return
+    end
+    skynet.error(string.format('success:%s', info))
+    local file2=io.output("resp.html") 
+    io.write(info)
+    io.flush()
+    io.close()
+end
+
+
 local function alipay_precreate()
     local pri_key = "xxxxxx"
     skynet.error('alipay_precreate:')
@@ -354,7 +609,8 @@ local function alipay_precreate()
     params.sign_type = "RSA"
     params.version = "1.0"
     params.timestamp = os.date("%Y-%m-%d %H:%M:%S", os.time())
-    params.notify_url = "http://dev1_game.happyfish.lkgame.com:8007/payment_notify/alipay_trade_precreate"
+    --params.notify_url = "http://dev1_game.happyfish.lkgame.com:8007/payment_notify/alipay_trade_precreate"
+    params.notify_url = "http://dev1_game.happyfish.lkgame.com:8080/getPost"
     params.biz_content = json.encode(biz_content)
     skynet.error('alipay_precreate:')
     local sign_str = (sort_params(params))
@@ -432,16 +688,21 @@ local function test_rsa()
 end
 
 local function main()
+    -- get lk openid test
     skynet.error('hello:'..md5.sumhexa('hello'))
+    --[[
     local rst = getLkUserToken()
     local openid = "25811562"
-    local token = "e2d3591c3c3c47759f5930b538f5bd9b"
+    local token = rst.token 
     if validateLkUser(openid, token) then
     end
-    --alipay_precreate()
+    ]]
+    --test_http_post()
+    alipay_app()
     --test_rsa()
     --test_xml()
     --get_swiftpass_order(nil, nil, {})
+    --test_weixin_pay()
     logger.debug("debug log test")    
     logger.info("info log test")    
     logger.warn("warn log test")    
