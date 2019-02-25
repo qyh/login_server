@@ -15,7 +15,9 @@ local APP_ID = skynet.getenv("lk_game_appid") or "28449289"
 local APP_KEY = skynet.getenv("lk_game_appkey") or "d72101a1375f4cdbb058455b1bff7df3"
 local LK_GAME_HOST = skynet.getenv("lk_game_host") or "api.lkgame.com"
 local CMD = {}
-
+local function handle_error(e)
+	return debug.traceback(coroutine.running(), tostring(e), 2)
+end
 local alipay_config = {
     app_id = "2016080200153059", 
     seller_id = "widvej2444@sandbox.com",
@@ -529,20 +531,26 @@ oT3zxmk5RxUE7vjjgQ9nm2IYS9KQtikkj39YkqnqVdVcfWIJ1HNh23
     local biz_content = {}
     biz_content.out_trade_no = generate_order_id()
     biz_content.subject = ("title")
-    biz_content.total_amount = 2
+    biz_content.total_amount = 0.01
     biz_content.body = "body"
-    biz_content.product_code = "QUICK_MSECURITY_PAY"
+    --biz_content.product_code = "QUICK_MSECURITY_PAY"
+    biz_content.product_code = "QUICK_WAP_WAY"
+	biz_content.quit_url = "http://dev1_game.happyfish.lkgame.com:8080/getPost"
    
     local params = {}
     params.app_id = "2019022063257325" 
-    params.method = "alipay.trade.app.pay"
-    params.charset = "GBK"
+    --params.method = "alipay.trade.app.pay"
+    --params.method = "alipay.trade.create"
+    --params.method = "alipay.trade.precreate"
+    params.method = "alipay.trade.wap.pay"
+    params.charset = "utf-8"
     --params.format = "json"
     params.sign_type = "RSA2"
     params.version = "1.0"
     params.timestamp = os.date("%Y-%m-%d %H:%M:%S", os.time())
     --params.notify_url = "http://dev1_game.happyfish.lkgame.com:8007/payment_notify/alipay_trade_precreate"
-    params.notify_url = "http://dev1_game.happyfish.lkgame.com:8080/getPost"
+    --params.notify_url = "http://dev1_game.happyfish.lkgame.com:8080/getPost"
+    params.notify_url = "http://222.52.143.146:9003/alipayCallBack"
     params.biz_content = json.encode(biz_content)
     skynet.error('alipay_app:')
     local sign_str = (sort_params(params))
@@ -552,8 +560,11 @@ oT3zxmk5RxUE7vjjgQ9nm2IYS9KQtikkj39YkqnqVdVcfWIJ1HNh23
     local signer = cryptopp.rsa_signer(priv_key)
     local sign = (crypt.base64encode(signer(sign_str)))
 	]]
-	logger.debug("%s", codec)
-	local bs = codec.rsa_private_sign_sha256withrsa(sign_str, pri_key)
+	logger.debug("%s", codec.rsa_private_sign_sha256withrsa)
+	local ok, bs = xpcall(codec.rsa_private_sign_sha256withrsa, handle_error, sign_str, pri_key)
+	if not ok then
+		logger.err("call failed:%s", tostring(bs))
+	end
 	local sign = codec.base64_encode(bs)
     skynet.error(string.format('sign:%s', sign))
     params.sign = sign 
@@ -688,6 +699,8 @@ local function test_rsa()
 end
 
 local function main()
+	local function f()
+	end
     -- get lk openid test
     skynet.error('hello:'..md5.sumhexa('hello'))
     --[[
